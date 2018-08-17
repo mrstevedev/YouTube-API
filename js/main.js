@@ -1,48 +1,56 @@
 // Client ID and API key
-const CLIENT_ID = "189643230949-co6f5nj5cldv27g5mcosilbr6hmv887t.apps.googleusercontent.com";
+const CLIENT_ID = '189643230949-glhm8umgsl3e2bcm66j9m1u1do4jtm3m.apps.googleusercontent.com';
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest"];
 const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly';
 
 const authorizeButton = document.getElementById('authorize-button');
 const signoutButton = document.getElementById('signout-button');
-
 const content = document.getElementById('content');
 const channelForm = document.getElementById('channel-form');
 const channelInput = document.getElementById('channel-input');
 const videoContainer = document.getElementById('video-container');
 
-const defaultChannel = 'boobacrazy';
+const defaultChannel = 'KickBack90sBeats';
 
-// Load auth2 Library
+// Form submit and change channel
+channelForm.addEventListener('submit', e => {
+    e.preventDefault();
+
+    const channel = channelInput.value;
+
+    getChannel(channel);
+})
+
+
+// Load auth2 library
 function handleClientLoad() {
     gapi.load('client:auth2', initClient);
 }
 
-// Init API client libraru and set up sign in state listeners
+// Init API Client library and set up sign in listeners
 function initClient() {
     gapi.client.init({
         discoveryDocs: DISCOVERY_DOCS,
         clientId: CLIENT_ID,
         scope: SCOPES
     }).then(() => {
-        // Listen for sign in state changes
+        //listen for sign in state changes
         gapi.auth2.getAuthInstance().isSignedIn.listen(updateSignInStatus);
-
-        // Handle initial sign in state
+        // Handle initial sign in state 
         updateSignInStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
-        authorizeButton.onclick = handleAuthClick;
-        signoutButton.onclick = handleSignoutClick;
-    });
-}
 
+        authorizeButton.onclick = handleAuthClick;
+        signoutButton.onclick = signOutClick;
+    })
+}
 // Update UI sign in state changes
 function updateSignInStatus(isSignedIn) {
-    if(isSignedIn) {
+    if (isSignedIn) {
         authorizeButton.style.display = 'none';
         signoutButton.style.display = 'block';
         content.style.display = 'block';
         videoContainer.style.display = 'block';
-        getChannel(defaultChannel);
+        getChannel(defaultChannel)
 
     } else {
         authorizeButton.style.display = 'block';
@@ -52,17 +60,89 @@ function updateSignInStatus(isSignedIn) {
     }
 }
 
-// Handle Login
-function handleAuthClick(event) {
+// Handle login
+function handleAuthClick() {
     gapi.auth2.getAuthInstance().signIn();
 }
 
-// Handle Logout
-function handleSignoutClick(event) {
+// Handle logout
+function signOutClick() {
     gapi.auth2.getAuthInstance().signOut();
+}
+
+// Display Channel Data
+function showChannelData(data) {
+    const channeldData = document.getElementById('channel-data');
+    channeldData.innerHTML = data;
 }
 
 // Get channel from API
 function getChannel(channel) {
-    console.log(channel);
+    gapi.client.youtube.channels.list({
+        part: 'snippet, contentDetails, statistics',
+        forUsername: channel
+    }).then(response => {
+        console.log(response);
+        const channel = response.result.items[0];
+
+        const output = `
+        <ul class="collection">
+            <li class="collection-item">Title: ${channel.snippet.title}</li>
+            <li class="collection-item">ID: ${channel.id}</li>
+            <li class="collection-item">Subscribers: ${numberWithCommas(channel.statistics.subscriberCount)}</li>
+            <li class="collection-item">Views: ${numberWithCommas(channel.statistics.viewCount)}</li>
+            <li class="collection-item">Videos: ${numberWithCommas(channel.statistics.videoCount)}</li>
+        </ul>
+        <p>${channel.snippet.description}</p>
+        <hr />
+        <a class="btn grey darken-2 waves" target="_blank" href="https://youtube.com/${channel.snippet.customUrl}">Visit Channel</a>
+        `;
+        showChannelData(output);
+
+        const playlistId = channel.contentDetails.relatedPlaylists.uploads;
+        requestVideoPlaylist(playlistId);
+
+    }).catch(err => alert('No Channel by that name'));
+
+}
+
+function numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+
+function requestVideoPlaylist(playlistId) {
+    const requestOptions = {
+        playlistId: playlistId,
+        part: 'snippet',
+        maxResults: 10
+    }
+
+    const request = gapi.client.youtube.playlistItems.list(requestOptions);
+
+    request.execute(response => {
+        console.log(response);
+        playListItems = response.result.items;
+        if(playListItems) {
+            let output = '<h4 class="center-align">Latest Videos</h4>';
+
+            // Loop through videos and append output
+            playListItems.forEach(item => {
+                const videoId = item.snippet.resourceId.videoId
+
+                output += `
+                    <div class="col s12 m6 l3">
+                    <iframe width="100%" height="auto" src="https://www.youtube.com/embed/${videoId}" 
+                    frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                    </div>
+                `;
+            });
+
+            // Output videos
+            videoContainer.innerHTML = output;
+
+        } else {
+            videoContainer.innerHTML = 'No uploaded videos'
+        }
+    })
 }
